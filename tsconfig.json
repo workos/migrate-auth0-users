@@ -3,6 +3,7 @@
     "lib": ["ESNext"],
     "module": "nodenext",
     "target": "esnext",
+    "moduleResolution": "bundler",
     "noEmit": true,
     "composite": true,
     "strict": true,

@@ -1,12 +1,12 @@
 {
   "name": "migrate-auth0-users",
-  "module": "main.mts",
+  "module": "src/index.ts",
   "type": "module",
   "bin": {
-    "migrate-auth0-users": "command.ts"
+    "migrate-auth0-users": "bin/migrate-auth0-users.ts"
   },
   "scripts": {
-    "format": "prettier . --write "
+    "format": "prettier . --write"
   },
   "devDependencies": {
     "@types/node": "^20.8.6",
