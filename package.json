@@ -5,7 +5,11 @@
   "bin": {
     "migrate-auth0-users": "command.mts"
   },
+  "scripts": {
+    "format": "prettier . --write "
+  },
   "devDependencies": {
+    "prettier": "^3.0.3",
     "typescript": "^5.2.2"
   },
   "peerDependencies": {

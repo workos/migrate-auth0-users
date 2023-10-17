@@ -1,14 +1,17 @@
-
 import assert from "assert";
-import { createReadStream } from 'fs';
-import readline from 'readline';
+import { createReadStream } from "fs";
+import readline from "readline";
 
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 import { WorkOS } from "@workos-inc/node";
 
 dotenv.config();
 
-const workos = new WorkOS(process.env.WORKOS_SECRET_KEY, { https: false, apiHostname: 'localhost', port: 7000 });
+const workos = new WorkOS(process.env.WORKOS_SECRET_KEY, {
+  https: false,
+  apiHostname: "localhost",
+  port: 7000,
+});
 
 let recordCount = 0;
 let completedCount = 0;
@@ -58,7 +61,7 @@ async function findOrCreateUser(record: UserRecord) {
       lastName: record.lastName,
     });
     return user;
-  } catch(e) {
+  } catch (e) {
     const matchingUsers = await workos.users.listUsers({ email: record.email });
     if (matchingUsers.data.length === 1) {
       return matchingUsers.data[0];
@@ -79,15 +82,16 @@ async function processLine(line: string) {
   try {
     await workos.post(`/users/${workOSUser.id}/password/migrate`, {
       password_hash: record.passwordHash,
-      password_type: 'bcrypt',
+      password_type: "bcrypt",
     });
-  }
-  catch(e: any) {
-    if (e?.rawData?.code === 'password_already_set') {
-      console.log(`${record.email} (WorkOS ${workOSUser.id}) already has a password set`);
+  } catch (e: any) {
+    if (e?.rawData?.code === "password_already_set") {
+      console.log(
+        `${record.email} (WorkOS ${workOSUser.id}) already has a password set`,
+      );
       return;
     }
-    throw(e);
+    throw e;
   }
 
   completedCount++;
@@ -107,7 +111,7 @@ async function main() {
   const fileStream = createReadStream(filename);
   const rl = readline.createInterface({
     input: fileStream,
-    crlfDelay: Infinity
+    crlfDelay: Infinity,
   });
 
   const semaphore = new Semaphore(10); // Max 10 concurrent user imports
@@ -125,11 +129,13 @@ async function main() {
   }
 
   await Promise.all(pendingUpdates);
-  console.log(`Done importing. ${completedCount} of ${recordCount} user records imported.`);
+  console.log(
+    `Done importing. ${completedCount} of ${recordCount} user records imported.`,
+  );
 }
 
 export default function start() {
-  main().catch(err => {
+  main().catch((err) => {
     console.error(err);
     process.exit(1);
   });

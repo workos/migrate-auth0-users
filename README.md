@@ -9,6 +9,7 @@ WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users auth0-users-fi
 ```
 
 Example output
+
 ```
 % WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users example-input.json
 Need to install the following packages:
