@@ -25,11 +25,8 @@ type UserRecord = {
 
 class Semaphore {
   private tasks: (() => void)[] = [];
-  count: number;
 
-  constructor(count: number) {
-    this.count = count;
-  }
+  constructor(private count: number) {}
 
   async acquire() {
     if (this.count > 0) {
