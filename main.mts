@@ -1,4 +1,3 @@
-import assert from "assert";
 import { createReadStream } from "fs";
 import readline from "readline";
 
