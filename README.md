@@ -26,4 +26,4 @@ Done importing. 4 of 6 user records imported.
 
 #### Input file format
 
-Expects a file in newline-delimited JSON, with each line containing an object with `email` and `passwordHash` properties, and optionally `firstName` and `lastName`
+Expects a file in newline-delimited JSON, with each line containing an object with `email` and `passwordHash` properties, and optionally `emailVerified`, `firstName`, and `lastName`.

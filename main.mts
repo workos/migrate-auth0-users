@@ -15,8 +15,9 @@ let completedCount = 0;
 
 type UserRecord = {
   email: string;
-  firstName: string;
-  lastName: string;
+  emailVerified?: boolean;
+  firstName?: string;
+  lastName?: string;
   passwordHash: string;
 };
 
@@ -52,6 +53,7 @@ async function findOrCreateUser(record: UserRecord) {
   try {
     const user = await workos.users.createUser({
       email: record.email,
+      emailVerified: record.emailVerified,
       firstName: record.firstName,
       lastName: record.lastName,
     });

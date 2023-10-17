@@ -1,2 +1,2 @@
-{ "firstName": "Mickey", "lastName": "Mouse", "email":"jason+test8@foo-corp.com", "passwordHash":"$2b$10$.qHPp/srqo1NAAAAAvlkmOdqAbH2Rg0qPv2Txj3ZwXfjJnewSjc4m" }
-{ "firstName": "Donald", "lastName": "Duck", "email":"jason+test9@foo-corp.com", "passwordHash":"$2b$10$.qHPp/srqo1NAAAAAvlkmOdqAbH2Rg0qPv2Txj3ZwXfjJnewSjc4m" }
+{ "firstName": "Mickey", "lastName": "Mouse", "email":"jason+test8@foo-corp.com", "emailVerified": true, "passwordHash":"$2b$10$.qHPp/srqo1NAAAAAvlkmOdqAbH2Rg0qPv2Txj3ZwXfjJnewSjc4m" }
+{ "firstName": "Donald", "lastName": "Duck", "email":"jason+test9@foo-corp.com", "emailVerified": false, "passwordHash":"$2b$10$.qHPp/srqo1NAAAAAvlkmOdqAbH2Rg0qPv2Txj3ZwXfjJnewSjc4m" }
