@@ -3,7 +3,7 @@
   "module": "main.mts",
   "type": "module",
   "bin": {
-    "migrate-auth0-users": "command.mts"
+    "migrate-auth0-users": "command.ts"
   },
   "scripts": {
     "format": "prettier . --write "
