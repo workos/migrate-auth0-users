@@ -53,14 +53,13 @@ class Semaphore {
 
 async function findOrCreateUser(record: UserRecord) {
   try {
-    const user = await workos.users.createUser({
+    return await workos.users.createUser({
       email: record.email,
       emailVerified: record.emailVerified,
       firstName: record.firstName,
       lastName: record.lastName,
     });
-    return user;
-  } catch (e) {
+  } catch {
     const matchingUsers = await workos.users.listUsers({ email: record.email });
     if (matchingUsers.data.length === 1) {
       return matchingUsers.data[0];
