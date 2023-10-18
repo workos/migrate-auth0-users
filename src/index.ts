@@ -11,11 +11,15 @@ import { Auth0ExportedUser } from "./auth0-exported-user";
 
 dotenv.config();
 
-const workos = new WorkOS(process.env.WORKOS_SECRET_KEY, {
-  https: false,
-  apiHostname: "localhost",
-  port: 7000,
-});
+const USE_LOCAL_API = (process.env.NODE_ENV || '').startsWith('dev');
+
+const workos = new WorkOS(
+  process.env.WORKOS_SECRET_KEY,
+  USE_LOCAL_API ? {
+    https: false,
+    apiHostname: "localhost",
+    port: 7000,
+  } : {});
 
 async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   try {
