@@ -1,8 +1,13 @@
-import { createReadStream } from "fs";
-import readline from "readline";
-
-import dotenv from "dotenv";
 import { WorkOS } from "@workos-inc/node";
+import dotenv from "dotenv";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import fs from "fs/promises";
+
+import { ndjsonStream } from "./ndjson-stream";
+import { Semaphore } from "./semaphore";
+import { PasswordStore } from "./password-store";
+import { Auth0ExportedUser } from "./auth0-exported-user";
 
 dotenv.config();
 
@@ -12,121 +17,127 @@ const workos = new WorkOS(process.env.WORKOS_SECRET_KEY, {
   port: 7000,
 });
 
-let recordCount = 0;
-let completedCount = 0;
-
-type UserRecord = {
-  email: string;
-  emailVerified?: boolean;
-  firstName?: string;
-  lastName?: string;
-  passwordHash: string;
-};
-
-class Semaphore {
-  private tasks: (() => void)[] = [];
-
-  constructor(private count: number) {}
-
-  async acquire() {
-    if (this.count > 0) {
-      this.count--;
-    } else {
-      await new Promise<void>((res) => this.tasks.push(res));
-    }
-  }
-
-  release() {
-    if (this.tasks.length > 0) {
-      const next = this.tasks.shift();
-      if (next) {
-        next();
-      }
-    } else {
-      this.count++;
-    }
-  }
-}
-
-async function findOrCreateUser(record: UserRecord) {
+async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   try {
     return await workos.users.createUser({
-      email: record.email,
-      emailVerified: record.emailVerified,
-      firstName: record.firstName,
-      lastName: record.lastName,
+      email: exportedUser.Email,
+      emailVerified: exportedUser["Email Verified"],
+      firstName: exportedUser["Given Name"],
+      lastName: exportedUser["Family Name"],
     });
   } catch {
-    const matchingUsers = await workos.users.listUsers({ email: record.email });
+    const matchingUsers = await workos.users.listUsers({
+      email: exportedUser.Email,
+    });
     if (matchingUsers.data.length === 1) {
       return matchingUsers.data[0];
     }
   }
 }
 
-async function processLine(line: string) {
-  const record: UserRecord = JSON.parse(line);
-  recordCount++;
+async function processLine(line: unknown, passwordStore: PasswordStore) {
+  const exportedUser = Auth0ExportedUser.parse(line);
 
-  const workOSUser = await findOrCreateUser(record);
-  if (!workOSUser) {
-    console.error(`Could not find or create user ${record.email}`);
+  const workOsUser = await findOrCreateUser(exportedUser);
+  if (!workOsUser) {
+    console.error(`Could not find or create user ${exportedUser.Email}`);
     return;
   }
 
-  try {
-    await workos.post(`/users/${workOSUser.id}/password/migrate`, {
-      password_hash: record.passwordHash,
-      password_type: "bcrypt",
-    });
-  } catch (e: any) {
-    if (e?.rawData?.code === "password_already_set") {
-      console.log(
-        `${record.email} (WorkOS ${workOSUser.id}) already has a password set`,
-      );
-      return;
+  const password = await passwordStore.find(exportedUser.Id);
+
+  if (password) {
+    try {
+      await workos.post(`/users/${workOsUser.id}/password/migrate`, {
+        password_hash: password.password_hash,
+        password_type: "bcrypt",
+      });
+    } catch (e: any) {
+      if (e?.rawData?.code === "password_already_set") {
+        console.log(
+          `${exportedUser.Email} (WorkOS ${workOsUser.id}) already has a password set`,
+        );
+        return;
+      }
+
+      throw e;
     }
-    throw e;
+  } else {
+    console.log(`No password found in export for ${exportedUser.Id}`);
   }
 
-  completedCount++;
-
-  console.log(`Imported user ${record.email} as WorkOS User ${workOSUser.id}`);
+  console.log(
+    `Imported user ${exportedUser.Email} as WorkOS User ${workOsUser.id}`,
+  );
 }
 
 async function main() {
-  const filename = process.argv[2];
-  if (!filename) {
-    console.error("Usage: migrate-auth0-users <filename>");
-    process.exit(1);
-  }
+  const {
+    passwordExport: passwordFilePath,
+    userExport: userFilePath,
+    cleanupTempDb,
+  } = await yargs(hideBin(process.argv))
+    .option("user-export", {
+      type: "string",
+      required: true,
+      description:
+        "Path to the user export created by the Auth0 export extension.",
+    })
+    .option("password-export", {
+      type: "string",
+      required: true,
+      description: "Path to the password export received from Auth0 support.",
+    })
+    .option("cleanup-temp-db", {
+      type: "boolean",
+      default: true,
+      description:
+        "Whether to delete the temporary sqlite database after finishing the migration.",
+    })
+    .version(false)
+    .parse();
 
-  console.log(`Importing users from ${filename}`);
+  console.log(`Importing password hashes from ${passwordFilePath}`);
 
-  const fileStream = createReadStream(filename);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
+  const passwordStore = await new PasswordStore().fromPasswordExport(
+    passwordFilePath,
+  );
+
+  console.log(`Importing users from ${userFilePath}`);
 
   const semaphore = new Semaphore(10); // Max 10 concurrent user imports
 
   const pendingUpdates: Promise<void>[] = [];
+  let recordCount = 0;
+  let completedCount = 0;
 
-  for await (const line of rl) {
-    await semaphore.acquire();
+  try {
+    for await (const line of ndjsonStream(userFilePath)) {
+      await semaphore.acquire();
 
-    const updating = processLine(line).finally(() => {
-      semaphore.release();
-    });
+      recordCount++;
+      const updating = processLine(line, passwordStore)
+        .then(() => {
+          completedCount++;
+        })
+        .finally(() => {
+          semaphore.release();
+        });
 
-    pendingUpdates.push(updating);
+      pendingUpdates.push(updating);
+    }
+
+    await Promise.all(pendingUpdates);
+    console.log(
+      `Done importing. ${completedCount} of ${recordCount} user records imported.`,
+    );
+  } finally {
+    passwordStore.destroy();
+
+    if (cleanupTempDb) {
+      await fs.rm(passwordStore.dbPath);
+    }
   }
-
-  await Promise.all(pendingUpdates);
-  console.log(
-    `Done importing. ${completedCount} of ${recordCount} user records imported.`,
-  );
 }
 
 export default function start() {

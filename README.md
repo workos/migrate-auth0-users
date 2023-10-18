@@ -5,13 +5,15 @@ Demonstration of importing Auth0 users into WorkOS, including setting password h
 #### Usage
 
 ```bash
-WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users auth0-users-file.json
+WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users --help
 ```
 
 Example output
 
 ```
-% WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users example-input.json
+% WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users \
+  --user-export dev-123abc.json \
+  --password-export password-export.json
 Need to install the following packages:
   github:workos/migrate-auth0-users
 Ok to proceed? (y) y
@@ -27,4 +29,13 @@ Done importing. 4 of 6 user records imported.
 
 #### Input file format
 
-Expects a file in newline-delimited JSON, with each line containing an object with `email` and `passwordHash` properties, and optionally `emailVerified`, `firstName`, and `lastName`.
+Two export files from Auth0 must be given.
+
+The first is passed via the `--user-export` flag and is obtained using the
+official [Auth0 Import/Export extension](https://auth0.com/docs/customize/extensions/user-import-export-extension). This
+tool expects that the export is created using the default fields
+which are added via the "Add default fields" button in the extension UI.
+
+The second export file is passed via the `--password-export` flag and is
+[obtained from Auth0 support by filing a ticket](requesting a password)
+and requesting password hashes to be exported.
