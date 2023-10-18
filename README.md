@@ -37,6 +37,6 @@ tool expects that the export is created using the default fields
 which are added via the "Add default fields" button in the extension UI.
 
 The second export file is passed via the `--password-export` flag and is
-[obtained from Auth0 support by filing a ticket](requesting a password)
+[obtained from Auth0 support by filing a ticket](https://auth0.com/docs/troubleshoot/customer-support/manage-subscriptions/export-data#user-passwords)
 and requesting password hashes to be exported. Note that the script will exit
 with an error if any custom password hashes are present.
