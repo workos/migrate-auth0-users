@@ -34,7 +34,7 @@ async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
     });
   } catch {
     const matchingUsers = await workos.users.listUsers({
-      email: exportedUser.Email,
+      email: exportedUser.Email.toLowerCase(),
     });
     if (matchingUsers.data.length === 1) {
       return matchingUsers.data[0];
