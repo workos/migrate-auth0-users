@@ -52,7 +52,7 @@ async function processLine(
   const workOsUser = await findOrCreateUser(exportedUser);
   if (!workOsUser) {
     console.error(
-      `(${recordNumber}) Could not find or create user ${exportedUser.Email}`,
+      `(${recordNumber}) Could not find or create user ${exportedUser.Id}`,
     );
     return;
   }
@@ -68,7 +68,7 @@ async function processLine(
     } catch (e: any) {
       if (e?.rawData?.code === "password_already_set") {
         console.log(
-          `(${recordNumber}) ${exportedUser.Email} (WorkOS ${workOsUser.id}) already has a password set`,
+          `(${recordNumber}) ${exportedUser.Id} (WorkOS ${workOsUser.id}) already has a password set`,
         );
         return;
       }
