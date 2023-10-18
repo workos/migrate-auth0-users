@@ -17,9 +17,6 @@ const workos = new WorkOS(process.env.WORKOS_SECRET_KEY, {
   port: 7000,
 });
 
-let recordCount = 0;
-let completedCount = 0;
-
 async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   try {
     return await workos.users.createUser({
@@ -40,7 +37,6 @@ async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
 
 async function processLine(line: unknown, passwordStore: PasswordStore) {
   const exportedUser = Auth0ExportedUser.parse(line);
-  recordCount++;
 
   const workOsUser = await findOrCreateUser(exportedUser);
   if (!workOsUser) {
@@ -69,8 +65,6 @@ async function processLine(line: unknown, passwordStore: PasswordStore) {
   } else {
     console.log(`No password found in export for ${exportedUser.Id}`);
   }
-
-  completedCount++;
 
   console.log(
     `Imported user ${exportedUser.Email} as WorkOS User ${workOsUser.id}`,
@@ -114,14 +108,21 @@ async function main() {
   const semaphore = new Semaphore(10); // Max 10 concurrent user imports
 
   const pendingUpdates: Promise<void>[] = [];
+  let recordCount = 0;
+  let completedCount = 0;
 
   try {
     for await (const line of ndjsonStream(userFilePath)) {
       await semaphore.acquire();
 
-      const updating = processLine(line, passwordStore).finally(() => {
-        semaphore.release();
-      });
+      recordCount++;
+      const updating = processLine(line, passwordStore)
+        .then(() => {
+          completedCount++;
+        })
+        .finally(() => {
+          semaphore.release();
+        });
 
       pendingUpdates.push(updating);
     }
