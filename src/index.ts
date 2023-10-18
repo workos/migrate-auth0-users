@@ -11,15 +11,18 @@ import { Auth0ExportedUser } from "./auth0-exported-user";
 
 dotenv.config();
 
-const USE_LOCAL_API = (process.env.NODE_ENV || '').startsWith('dev');
+const USE_LOCAL_API = (process.env.NODE_ENV || "").startsWith("dev");
 
 const workos = new WorkOS(
   process.env.WORKOS_SECRET_KEY,
-  USE_LOCAL_API ? {
-    https: false,
-    apiHostname: "localhost",
-    port: 7000,
-  } : {});
+  USE_LOCAL_API
+    ? {
+        https: false,
+        apiHostname: "localhost",
+        port: 7000,
+      }
+    : {},
+);
 
 async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   try {
@@ -39,12 +42,18 @@ async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   }
 }
 
-async function processLine(line: unknown, passwordStore: PasswordStore) {
+async function processLine(
+  line: unknown,
+  recordNumber: number,
+  passwordStore: PasswordStore,
+) {
   const exportedUser = Auth0ExportedUser.parse(line);
 
   const workOsUser = await findOrCreateUser(exportedUser);
   if (!workOsUser) {
-    console.error(`Could not find or create user ${exportedUser.Email}`);
+    console.error(
+      `(${recordNumber}) Could not find or create user ${exportedUser.Email}`,
+    );
     return;
   }
 
@@ -59,7 +68,7 @@ async function processLine(line: unknown, passwordStore: PasswordStore) {
     } catch (e: any) {
       if (e?.rawData?.code === "password_already_set") {
         console.log(
-          `${exportedUser.Email} (WorkOS ${workOsUser.id}) already has a password set`,
+          `(${recordNumber}) ${exportedUser.Email} (WorkOS ${workOsUser.id}) already has a password set`,
         );
         return;
       }
@@ -67,11 +76,13 @@ async function processLine(line: unknown, passwordStore: PasswordStore) {
       throw e;
     }
   } else {
-    console.log(`No password found in export for ${exportedUser.Id}`);
+    console.log(
+      `(${recordNumber}) No password found in export for ${exportedUser.Id}`,
+    );
   }
 
   console.log(
-    `Imported user ${exportedUser.Email} as WorkOS User ${workOsUser.id}`,
+    `(${recordNumber}) Imported Auth0 user ${exportedUser.Id} as WorkOS user ${workOsUser.id}`,
   );
 }
 
@@ -120,7 +131,7 @@ async function main() {
       await semaphore.acquire();
 
       recordCount++;
-      const updating = processLine(line, passwordStore)
+      const updating = processLine(line, recordCount, passwordStore)
         .then(() => {
           completedCount++;
         })
