@@ -3,9 +3,9 @@ import dotenv from "dotenv";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fs from "fs/promises";
+import Queue from "p-queue";
 
 import { ndjsonStream } from "./ndjson-stream";
-import { Semaphore } from "./semaphore";
 import { PasswordStore } from "./password-store";
 import { Auth0ExportedUser } from "./auth0-exported-user";
 
@@ -88,6 +88,8 @@ async function processLine(
   return true;
 }
 
+const MAX_CONCURRENT_USER_IMPORTS = 10;
+
 async function main() {
   const {
     passwordExport: passwordFilePath,
@@ -122,31 +124,26 @@ async function main() {
 
   console.log(`Importing users from ${userFilePath}`);
 
-  const semaphore = new Semaphore(10); // Max 10 concurrent user imports
+  const queue = new Queue({ concurrency: MAX_CONCURRENT_USER_IMPORTS });
 
-  const pendingUpdates: Promise<void>[] = [];
   let recordCount = 0;
   let completedCount = 0;
 
   try {
     for await (const line of ndjsonStream(userFilePath)) {
-      await semaphore.acquire();
+      await queue.onSizeLessThan(MAX_CONCURRENT_USER_IMPORTS);
 
+      queue.add(async () => {
+        const successful = await processLine(line, recordCount, passwordStore);
+        if (successful) {
+          completedCount++;
+        }
+      });
       recordCount++;
-      const updating = processLine(line, recordCount, passwordStore)
-        .then((successful) => {
-          if (successful) {
-            completedCount++;
-          }
-        })
-        .finally(() => {
-          semaphore.release();
-        });
-
-      pendingUpdates.push(updating);
     }
 
-    await Promise.all(pendingUpdates);
+    await queue.onIdle();
+
     console.log(
       `Done importing. ${completedCount} of ${recordCount} user records imported.`,
     );
