@@ -26,14 +26,14 @@ const workos = new WorkOS(
 
 async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
   try {
-    return await workos.users.createUser({
+    return await workos.userManagement.createUser({
       email: exportedUser.Email,
       emailVerified: exportedUser["Email Verified"],
       firstName: exportedUser["Given Name"],
       lastName: exportedUser["Family Name"],
     });
   } catch {
-    const matchingUsers = await workos.users.listUsers({
+    const matchingUsers = await workos.userManagement.listUsers({
       email: exportedUser.Email.toLowerCase(),
     });
     if (matchingUsers.data.length === 1) {
@@ -61,9 +61,10 @@ async function processLine(
 
   if (password) {
     try {
-      await workos.post(`/users/${workOsUser.id}/password/migrate`, {
-        password_hash: password.password_hash,
-        password_type: "bcrypt",
+      await workos.userManagement.updateUser({
+        userId: workOsUser.id,
+        passwordHash: password.password_hash,
+        passwordHashType: "bcrypt",
       });
     } catch (e: any) {
       if (e?.rawData?.code === "password_already_set") {
