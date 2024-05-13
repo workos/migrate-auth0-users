@@ -11,7 +11,7 @@ import { Auth0ExportedUser } from "./auth0-exported-user";
 
 dotenv.config();
 
-const USE_LOCAL_API = (process.env.NODE_ENV || "").startsWith("dev");
+const USE_LOCAL_API = (process.env.NODE_ENV ?? "").startsWith("dev");
 
 const workos = new WorkOS(
   process.env.WORKOS_SECRET_KEY,
@@ -24,13 +24,24 @@ const workos = new WorkOS(
     : {},
 );
 
-async function findOrCreateUser(exportedUser: Auth0ExportedUser) {
+async function findOrCreateUser(
+  exportedUser: Auth0ExportedUser,
+  passwordHash: string | undefined,
+) {
   try {
+    const passwordOptions = passwordHash
+      ? {
+          passwordHash,
+          passwordHashType: "bcrypt" as const,
+        }
+      : {};
+
     return await workos.userManagement.createUser({
       email: exportedUser.Email,
       emailVerified: exportedUser["Email Verified"],
       firstName: exportedUser["Given Name"],
       lastName: exportedUser["Family Name"],
+      ...passwordOptions,
     });
   } catch {
     const matchingUsers = await workos.userManagement.listUsers({
@@ -49,37 +60,22 @@ async function processLine(
 ): Promise<boolean> {
   const exportedUser = Auth0ExportedUser.parse(line);
 
-  const workOsUser = await findOrCreateUser(exportedUser);
+  const password = await passwordStore.find(exportedUser.Id);
+  if (!password) {
+    console.log(
+      `(${recordNumber}) No password found in export for ${exportedUser.Id}`,
+    );
+  }
+
+  const workOsUser = await findOrCreateUser(
+    exportedUser,
+    password?.password_hash,
+  );
   if (!workOsUser) {
     console.error(
       `(${recordNumber}) Could not find or create user ${exportedUser.Id}`,
     );
     return false;
-  }
-
-  const password = await passwordStore.find(exportedUser.Id);
-
-  if (password) {
-    try {
-      await workos.userManagement.updateUser({
-        userId: workOsUser.id,
-        passwordHash: password.password_hash,
-        passwordHashType: "bcrypt",
-      });
-    } catch (e: any) {
-      if (e?.rawData?.code === "password_already_set") {
-        console.log(
-          `(${recordNumber}) ${exportedUser.Id} (WorkOS ${workOsUser.id}) already has a password set`,
-        );
-        return false;
-      }
-
-      throw e;
-    }
-  } else {
-    console.log(
-      `(${recordNumber}) No password found in export for ${exportedUser.Id}`,
-    );
   }
 
   console.log(
