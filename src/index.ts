@@ -1,4 +1,4 @@
-import { WorkOS } from "@workos-inc/node";
+import { WorkOS, RateLimitExceededException } from "@workos-inc/node";
 import dotenv from "dotenv";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -8,6 +8,7 @@ import Queue from "p-queue";
 import { ndjsonStream } from "./ndjson-stream";
 import { PasswordStore } from "./password-store";
 import { Auth0ExportedUser } from "./auth0-exported-user";
+import { sleep } from "./sleep";
 
 dotenv.config();
 
@@ -43,7 +44,11 @@ async function findOrCreateUser(
       lastName: exportedUser["Family Name"],
       ...passwordOptions,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitExceededException) {
+      throw error;
+    }
+
     const matchingUsers = await workos.userManagement.listUsers({
       email: exportedUser.Email.toLowerCase(),
     });
@@ -85,6 +90,7 @@ async function processLine(
   return true;
 }
 
+const DEFAULT_RETRY_AFTER = 10;
 const MAX_CONCURRENT_USER_IMPORTS = 10;
 
 async function main() {
@@ -130,12 +136,38 @@ async function main() {
     for await (const line of ndjsonStream(userFilePath)) {
       await queue.onSizeLessThan(MAX_CONCURRENT_USER_IMPORTS);
 
-      queue.add(async () => {
-        const successful = await processLine(line, recordCount, passwordStore);
-        if (successful) {
-          completedCount++;
-        }
-      });
+      const recordNumber = recordCount;
+      const enqueueTask = () =>
+        queue
+          .add(async () => {
+            const successful = await processLine(
+              line,
+              recordNumber,
+              passwordStore,
+            );
+            if (successful) {
+              completedCount++;
+            }
+          })
+          .catch(async (error: unknown) => {
+            if (!(error instanceof RateLimitExceededException)) {
+              throw error;
+            }
+
+            const retryAfter = (error.retryAfter ?? DEFAULT_RETRY_AFTER) + 1;
+            console.warn(
+              `Rate limit exceeded. Pausing queue for ${retryAfter} seconds.`,
+            );
+
+            queue.pause();
+            enqueueTask();
+
+            await sleep(retryAfter * 1000);
+
+            queue.start();
+          });
+      enqueueTask();
+
       recordCount++;
     }
 
