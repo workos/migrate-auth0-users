@@ -5,9 +5,12 @@ import SQLite from "better-sqlite3";
 import { Database, Password } from "./database";
 
 const ExportedPassword = z.object({
-  _id: z.object({
-    $oid: z.string(),
-  }),
+  _id: z.union([
+    z.string(),
+    z.object({ 
+      $oid: z.string(),
+    }),
+  ]),
   passwordHash: z.string(),
 });
 
@@ -30,10 +33,18 @@ export class PasswordStore {
     for await (const line of ndjsonStream(passwordExportFilePath)) {
       const exportedPassword = ExportedPassword.parse(line);
 
+      let auth0Id = typeof exportedPassword._id === 'string' 
+        ? exportedPassword._id 
+        : exportedPassword._id.$oid;
+      
+      if (!auth0Id.startsWith('auth0|')) {
+        auth0Id = `auth0|${auth0Id}`;
+      }
+
       await this.db
         .insertInto("passwords")
         .values({
-          auth0_id: exportedPassword._id.$oid,
+          auth0_id: auth0Id,
           password_hash: exportedPassword.passwordHash,
         })
         .onConflict((oc) => oc.doNothing())
