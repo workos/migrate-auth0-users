@@ -6,7 +6,7 @@ import fs from "fs/promises";
 import Queue from "p-queue";
 
 import { ndjsonStream } from "./ndjson-stream";
-import { PasswordStore } from "./password-store";
+import { CredentialsStore } from "./credentials-store";
 import { Auth0ExportedUser } from "./auth0-exported-user";
 import { sleep } from "./sleep";
 
@@ -22,12 +22,13 @@ const workos = new WorkOS(
         apiHostname: "localhost",
         port: 7000,
       }
-    : {},
+    : {}
 );
 
 async function findOrCreateUser(
   exportedUser: Auth0ExportedUser,
   passwordHash: string | undefined,
+  otpSecret: string | undefined
 ) {
   try {
     const passwordOptions = passwordHash
@@ -37,13 +38,22 @@ async function findOrCreateUser(
         }
       : {};
 
-    return await workos.userManagement.createUser({
+    const workosUser = await workos.userManagement.createUser({
       email: exportedUser.Email,
       emailVerified: exportedUser["Email Verified"],
       firstName: exportedUser["Given Name"],
       lastName: exportedUser["Family Name"],
       ...passwordOptions,
     });
+
+    if (otpSecret) {
+      await workos.userManagement.enrollAuthFactor({
+        type: "totp",
+        userId: workosUser.id,
+        totpSecret: otpSecret,
+      });
+    }
+    return workosUser;
   } catch (error) {
     if (error instanceof RateLimitExceededException) {
       throw error;
@@ -53,7 +63,15 @@ async function findOrCreateUser(
       email: exportedUser.Email.toLowerCase(),
     });
     if (matchingUsers.data.length === 1) {
-      return matchingUsers.data[0];
+      const workosUser = matchingUsers.data[0];
+      if (otpSecret) {
+        await workos.userManagement.enrollAuthFactor({
+          type: "totp",
+          userId: workosUser.id,
+          totpSecret: otpSecret,
+        });
+      }
+      return workosUser;
     }
   }
 }
@@ -61,30 +79,38 @@ async function findOrCreateUser(
 async function processLine(
   line: unknown,
   recordNumber: number,
-  passwordStore: PasswordStore,
+  credentialsStore: CredentialsStore
 ): Promise<boolean> {
   const exportedUser = Auth0ExportedUser.parse(line);
 
-  const password = await passwordStore.find(exportedUser.Id);
+  const password = await credentialsStore.findPassword(exportedUser.Id);
   if (!password) {
     console.log(
-      `(${recordNumber}) No password found in export for ${exportedUser.Id}`,
+      `(${recordNumber}) No password found in export for ${exportedUser.Id}`
+    );
+  }
+
+  const optSecret = await credentialsStore.findOTPSecret(exportedUser.Id);
+  if (!optSecret) {
+    console.log(
+      `(${recordNumber}) No MFA Secret found in export for ${exportedUser.Id}`
     );
   }
 
   const workOsUser = await findOrCreateUser(
     exportedUser,
     password?.password_hash,
+    optSecret?.otp_secret
   );
   if (!workOsUser) {
     console.error(
-      `(${recordNumber}) Could not find or create user ${exportedUser.Id}`,
+      `(${recordNumber}) Could not find or create user ${exportedUser.Id}`
     );
     return false;
   }
 
   console.log(
-    `(${recordNumber}) Imported Auth0 user ${exportedUser.Id} as WorkOS user ${workOsUser.id}`,
+    `(${recordNumber}) Imported Auth0 user ${exportedUser.Id} as WorkOS user ${workOsUser.id}`
   );
 
   return true;
@@ -96,6 +122,7 @@ const MAX_CONCURRENT_USER_IMPORTS = 10;
 async function main() {
   const {
     passwordExport: passwordFilePath,
+    mfaExport: mfaFilePath,
     userExport: userFilePath,
     cleanupTempDb,
   } = await yargs(hideBin(process.argv))
@@ -107,8 +134,13 @@ async function main() {
     })
     .option("password-export", {
       type: "string",
-      required: true,
+      required: false,
       description: "Path to the password export received from Auth0 support.",
+    })
+    .option("mfa-export", {
+      type: "string",
+      required: false,
+      description: "Path to the mfa export received from Auth0 support.",
     })
     .option("cleanup-temp-db", {
       type: "boolean",
@@ -119,11 +151,20 @@ async function main() {
     .version(false)
     .parse();
 
-  console.log(`Importing password hashes from ${passwordFilePath}`);
+  const credentialsStore = await new CredentialsStore();
+  await credentialsStore.prepareSchema();
 
-  const passwordStore = await new PasswordStore().fromPasswordExport(
-    passwordFilePath,
-  );
+  if (passwordFilePath) {
+    console.log(`Importing password hashes from ${passwordFilePath}`);
+
+    await credentialsStore.fromPasswordExport(passwordFilePath);
+  }
+
+  if (mfaFilePath) {
+    console.log(`Importing mfa secrets from ${mfaFilePath}`);
+
+    await credentialsStore.fromSecretExport(mfaFilePath);
+  }
 
   console.log(`Importing users from ${userFilePath}`);
 
@@ -143,7 +184,7 @@ async function main() {
             const successful = await processLine(
               line,
               recordNumber,
-              passwordStore,
+              credentialsStore
             );
             if (successful) {
               completedCount++;
@@ -156,7 +197,7 @@ async function main() {
 
             const retryAfter = (error.retryAfter ?? DEFAULT_RETRY_AFTER) + 1;
             console.warn(
-              `Rate limit exceeded. Pausing queue for ${retryAfter} seconds.`,
+              `Rate limit exceeded. Pausing queue for ${retryAfter} seconds.`
             );
 
             queue.pause();
@@ -174,13 +215,13 @@ async function main() {
     await queue.onIdle();
 
     console.log(
-      `Done importing. ${completedCount} of ${recordCount} user records imported.`,
+      `Done importing. ${completedCount} of ${recordCount} user records imported.`
     );
   } finally {
-    passwordStore.destroy();
+    credentialsStore.destroy();
 
     if (cleanupTempDb) {
-      await fs.rm(passwordStore.dbPath);
+      await fs.rm(credentialsStore.dbPath);
     }
   }
 }
