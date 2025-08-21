@@ -29,6 +29,10 @@ async function findOrCreateUser(
   exportedUser: Auth0ExportedUser,
   passwordHash: string | undefined,
 ) {
+  if (!exportedUser.Email) {
+    return null;
+  }
+
   try {
     const passwordOptions = passwordHash
       ? {
