@@ -7,7 +7,7 @@ import { z } from "zod";
  */
 export const Auth0ExportedUser = z.object({
   Id: z.string(),
-  Email: z.string(),
+  Email: z.optional(z.string()),
   "Email Verified": z.optional(z.boolean()),
   "Given Name": z.optional(z.string()),
   "Family Name": z.optional(z.string()),
