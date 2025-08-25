@@ -13,7 +13,8 @@ Example output
 ```
 % WORKOS_SECRET_KEY=sk_abc123 npx github:workos/migrate-auth0-users \
   --user-export dev-123abc.json \
-  --password-export password-export.json
+  --password-export password-export.json \
+  --mfa-export mfa-export.json
 Need to install the following packages:
   github:workos/migrate-auth0-users
 Ok to proceed? (y) y
