@@ -33,7 +33,7 @@ export class PasswordStore {
       await this.db
         .insertInto("passwords")
         .values({
-          auth0_id: exportedPassword._id.$oid,
+          auth0_id: `auth0|${exportedPassword._id.$oid}`,
           password_hash: exportedPassword.passwordHash,
         })
         .onConflict((oc) => oc.doNothing())
