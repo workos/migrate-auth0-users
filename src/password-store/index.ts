@@ -18,10 +18,14 @@ export class PasswordStore {
     for await (const line of ndjsonStream(passwordExportFilePath)) {
       const exportedPassword = ExportedPassword.parse(line);
 
-      this.passwords.set(
-        exportedPassword._id.$oid,
-        exportedPassword.passwordHash,
-      );
+      // First-writer-wins within the genuine export, matching the previous
+      // `ON CONFLICT DO NOTHING` behavior for duplicate Auth0 IDs.
+      if (!this.passwords.has(exportedPassword._id.$oid)) {
+        this.passwords.set(
+          exportedPassword._id.$oid,
+          exportedPassword.passwordHash,
+        );
+      }
     }
 
     return this;
