@@ -2,7 +2,6 @@ import { WorkOS, RateLimitExceededException } from "@workos-inc/node";
 import dotenv from "dotenv";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import fs from "fs/promises";
 import Queue from "p-queue";
 
 import { ndjsonStream } from "./ndjson-stream";
@@ -98,30 +97,21 @@ const DEFAULT_RETRY_AFTER = 10;
 const MAX_CONCURRENT_USER_IMPORTS = 10;
 
 async function main() {
-  const {
-    passwordExport: passwordFilePath,
-    userExport: userFilePath,
-    cleanupTempDb,
-  } = await yargs(hideBin(process.argv))
-    .option("user-export", {
-      type: "string",
-      required: true,
-      description:
-        "Path to the user export created by the Auth0 export extension.",
-    })
-    .option("password-export", {
-      type: "string",
-      required: true,
-      description: "Path to the password export received from Auth0 support.",
-    })
-    .option("cleanup-temp-db", {
-      type: "boolean",
-      default: true,
-      description:
-        "Whether to delete the temporary sqlite database after finishing the migration.",
-    })
-    .version(false)
-    .parse();
+  const { passwordExport: passwordFilePath, userExport: userFilePath } =
+    await yargs(hideBin(process.argv))
+      .option("user-export", {
+        type: "string",
+        required: true,
+        description:
+          "Path to the user export created by the Auth0 export extension.",
+      })
+      .option("password-export", {
+        type: "string",
+        required: true,
+        description: "Path to the password export received from Auth0 support.",
+      })
+      .version(false)
+      .parse();
 
   console.log(`Importing password hashes from ${passwordFilePath}`);
 
@@ -182,10 +172,6 @@ async function main() {
     );
   } finally {
     passwordStore.destroy();
-
-    if (cleanupTempDb) {
-      await fs.rm(passwordStore.dbPath);
-    }
   }
 }
 
